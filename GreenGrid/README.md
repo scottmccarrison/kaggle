@@ -169,3 +169,37 @@ household forecasts and communicate predictions to non-technical stakeholders.
 ---
 
 ## Repository Structure
+greengrid-energy-forecast/
+├── README.md
+├── notebook/
+│ └── greengrid_xgboost.ipynb # Full pipeline: EDA → modeling → SHAP
+├── output/
+│ └── submission.csv # Final predictions (21,000 rows)
+└── requirements.txt
+
+## Requirements
+xgboost>=1.6
+shap
+pandas
+numpy
+scikit-learn
+matplotlib
+
+---
+
+## Next Steps
+
+- [ ] LightGBM comparison (typically faster than XGBoost, often similar accuracy)
+- [ ] LSTM baseline for direct deep learning comparison
+- [ ] Additional lag features (rolling 14-day average, day-of-week averages)
+- [ ] Apply pipeline to ASHRAE Great Energy Predictor III dataset
+  (real building energy data with multiple energy types)
+
+---
+
+## Skills Demonstrated
+
+`XGBoost` `SHAP` `Time Series Forecasting` `Panel Data` `Feature Engineering`
+`Hyperparameter Tuning` `Regularization` `Early Stopping` `EDA` `Python`
+`pandas` `scikit-learn` `matplotlib`
+
