@@ -203,3 +203,5 @@ matplotlib
 `Hyperparameter Tuning` `Regularization` `Early Stopping` `EDA` `Python`
 `pandas` `scikit-learn` `matplotlib`
 
+## References
+https://www.kaggle.com/competitions/green-grid-forecasting-daily-household-energy-consumption
