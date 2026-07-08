@@ -21,8 +21,8 @@ over a 14-day window using XGBoost and SHAP explainability.
 ---
 
 ### [House Prices: Advanced Regression](./house-prices-advanced-regression/)
-<br>
 https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques
+<br>
 *(In progress)*
 
 ---
