@@ -10,7 +10,7 @@ Currently pursuing an MS in Data Science.
 
 ## Projects
 
-### [GreenGrid: Household Energy Consumption Forecasting](greengrid/)
+### [GreenGrid: Household Energy Consumption Forecasting](GreenGrid)
 Predicting daily household electricity consumption for 1,500 households 
 over a 14-day window using XGBoost and SHAP explainability.  
 **Validation RMSLE: 0.1559** | 59% improvement over baseline  
