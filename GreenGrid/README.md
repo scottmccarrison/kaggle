@@ -1,207 +1,147 @@
-# GreenGrid: Household Energy Consumption Forecasting
+# Kaggle & Data Science Projects
 
-Predicting daily household electricity consumption (kWh) for 1,500 households
-over a 14-day window using XGBoost with SHAP explainability.
+End-to-end machine learning projects built to demonstrate the full 
+data science workflow: EDA → modeling → evaluation → explainability.
 
-**Validation RMSLE: 0.1559** | Baseline RMSLE: 0.3866 | Improvement: 59%
-
----
-
-## Problem Statement
-
-Electric utilities need accurate short-term load forecasts to manage grid
-operations, plan capacity, and identify anomalous consumption patterns.
-This project builds a daily household-level energy forecasting model using
-the GreenGrid Synthetic Smart-Meter Dataset — a panel dataset of 1,500
-households over 74 days (60 train, 14 test).
-
-The task is a **panel time series regression** problem: predict tomorrow's
-kWh consumption for each household given historical usage, household
-attributes, and weather data.
-
-**Evaluation metric:** RMSLE (Root Mean Squared Log Error) — penalizes
-errors proportionally, so a 10% error on a high-consumption household is
-treated the same as a 10% error on a low-consumption household.
+Background: Data Engineer at an electric utility in Pittsburgh, PA.
+Currently pursuing an MS in Data Science.
+Goal: Become a full-stack Data Scientist — scope, build, deploy, and 
+maintain ML solutions end-to-end.
 
 ---
 
-## Dataset
+## Completed Projects
 
-- **Source:** GreenGrid Synthetic Smart-Meter Dataset v1.0, 2026
-- **Train:** 88,500 rows (1,500 households × 59 days)
-- **Test:** 21,000 rows (1,500 households × 14 days)
-- **Target:** Daily kWh consumption (range: 0.4–76.2 kWh, mean: 26.1 kWh)
-
-### Feature Groups
-
-| Group | Features |
-|---|---|
-| Household attributes (static) | `num_residents`, `home_sqft`, `has_ev`, `has_solar`, `has_pool`, `heating_type`, `hvac_age_years` |
-| Weather (daily) | `temp_avg_c`, `temp_min_c`, `temp_max_c`, `humidity_pct`, `wind_kph`, `precip_mm`, `solar_index` |
-| Calendar | `is_weekend`, `is_holiday` |
-| Lag features | `prior_day_kwh`, `prior_week_avg_kwh` |
-
-Data is fully synthetic with a transparent physical generation model:
-`kwh ≈ base_load + heating_load + cooling_load + ev_charging + pool_pump
-       + weekend/holiday bumps − solar_offset × lognormal noise`
-
----
-
-## Exploratory Data Analysis
-
-Key findings from EDA:
-
-- **No missing values** — clean synthetic dataset, no imputation required
-- **Winter-period data** — mean temperature -0.4°C (range: -18.7 to 19.4°C);
-  heating load dominates, minimal cooling load
-- **Lag features mirror target distribution** — `prior_week_avg_kwh` and
-  `prior_day_kwh` have nearly identical mean/std to the target, indicating
-  strong temporal autocorrelation
-- **Target is approximately symmetric** — mean (26.1) ≈ median (25.3);
-  log-transform applied for RMSLE alignment rather than skew correction
-- **One string categorical** — `heating_type` (gas 39%, electric 35%,
-  heat_pump 26%) requires one-hot encoding; all other features are numeric
-
----
-
-## Modeling Approach
-
-### Why XGBoost over LSTM
-
-This dataset is structured tabular data with pre-engineered lag features.
-Tree-based models consistently outperform deep learning on tabular data at
-this scale (Grinsztajn et al., 2022). LSTMs require sequence reconstruction
-per household; XGBoost uses the provided lag features directly.
-An LSTM comparison is planned as a follow-on experiment.
-
-### Validation Strategy
-
-**Chronological split** — the last 14 days of training data are held out as
-validation. Random splitting is inappropriate for time series because it
-allows the model to learn from future data when predicting the past,
-producing optimistic validation scores that do not reflect true test performance.
-
-### Feature Engineering
-
-Two engineered features were tested:
-- `temp_range = temp_max_c − temp_min_c` — daily temperature swing
-- `solar_interaction = temp_avg_c × has_solar` — explicit solar/temperature
-  interaction
-
-Both features preserved performance without degradation, confirming the
-baseline tree structure already captured these relationships implicitly.
-`temp_min_c` and `temp_max_c` were removed as redundant after
-`temp_range` was added.
-
-### Hyperparameter Tuning
-
-Systematic tuning addressed overfitting identified in the baseline run
-(train RMSE 0.122 vs val RMSE 0.159 at tree 300, with validation
-degrading thereafter).
-
-| Parameter | Baseline | Final | Rationale |
-|---|---|---|---|
-| `max_depth` | 6 | 4 | Shallower trees generalize better |
-| `learning_rate` | 0.1 | 0.05 | Slower learning, more trees, better generalization |
-| `n_estimators` | 500 | 2000 (ceiling) | Early stopping determines actual count |
-| `reg_alpha` (L1) | 0 | 1.0 | Pushes weak feature weights toward zero |
-| `reg_lambda` (L2) | 1.0 | 2.0 | Prevents single feature dominance |
-| `early_stopping_rounds` | — | 25 | Auto-stops when val score plateaus |
-
-Final model stopped at **tree 1,597** with validation score continuously
-improving — no degradation pattern, confirming regularization resolved overfitting.
-
----
-
-## Results
-
-| Model | Validation RMSLE | Validation RMSE (kWh) |
-|---|---|---|
-| Baseline (median) | 0.3866 | — |
-| XGBoost default params | 0.1592 | 4.23 |
-| + depth tuning | 0.1575 | 4.20 |
-| + regularization + early stopping | 0.1573 | 4.17 |
-| **+ aggressive regularization (final)** | **0.1559** | **4.14** |
-
-The final model reduces baseline error by **59%** — average prediction
-error of 4.14 kWh on mean consumption of 26.1 kWh (~16% relative error).
-
----
-
-## Model Explainability (SHAP)
-
-SHAP (SHapley Additive exPlanations) was used to explain model predictions
-at both the population and individual household level.
-
-### Key Finding: Gain Importance vs. SHAP Importance
-
-Gain-based importance ranked `prior_week_avg_kwh` first at 49.5% — suggesting
-the model was a near-persistence forecast. SHAP analysis revealed a different
-picture after regularization:
-
-| SHAP Rank | Feature | Interpretation |
-|---|---|---|
-| 1 | `has_solar` | Solar households have significantly lower net consumption |
-| 2 | `home_sqft` | Larger homes drive higher heating/cooling load |
-| 3 | `has_ev` | EV chargers add meaningful consumption |
-| 4 | `num_residents` | More residents increase base load |
-| 5 | `prior_week_avg_kwh` | Recent usage is predictive but not dominant |
-
-All directional relationships are physically interpretable and consistent
-with the known generation formula — confirming the model learned real
-patterns rather than statistical artifacts.
-
-### Individual Prediction Explanation (Waterfall Plot)
-
-For a sample household (actual: 19.61 kWh, predicted: 21.54 kWh):
-
-- Base value (population average): **24.86 kWh**
-- Gas heating (not electric): **−0.04** (less electrical heating load)
-- No EV charger: **−0.04** (no charger load)
-- Below-average home size (2,256 sqft): **−0.02**
-- New HVAC system (2 years): **−0.02** (high efficiency)
-- 4 residents (above average): **+0.02**
-- Final prediction: **21.54 kWh**
-
-This level of explainability enables utility analysts to audit individual
-household forecasts and communicate predictions to non-technical stakeholders.
-
----
-
-## Repository Structure
-greengrid-energy-forecast/
-├── README.md
-├── notebook/
-│ └── greengrid_xgboost.ipynb # Full pipeline: EDA → modeling → SHAP
-├── output/
-│ └── submission.csv # Final predictions (21,000 rows)
-└── requirements.txt
-
-## Requirements
-xgboost>=1.6
-shap
-pandas
-numpy
-scikit-learn
-matplotlib
-
----
-
-## Next Steps
-
-- [ ] LightGBM comparison (typically faster than XGBoost, often similar accuracy)
-- [ ] LSTM baseline for direct deep learning comparison
-- [ ] Additional lag features (rolling 14-day average, day-of-week averages)
-- [ ] Apply pipeline to ASHRAE Great Energy Predictor III dataset
-  (real building energy data with multiple energy types)
-
----
-
-## Skills Demonstrated
-
-`XGBoost` `SHAP` `Time Series Forecasting` `Panel Data` `Feature Engineering`
-`Hyperparameter Tuning` `Regularization` `Early Stopping` `EDA` `Python`
-`pandas` `scikit-learn` `matplotlib`
-
-## References
+### [GreenGrid: Household Energy Consumption Forecasting](./greengrid-energy-forecast/)
 https://www.kaggle.com/competitions/green-grid-forecasting-daily-household-energy-consumption
+<br>
+Predicting daily household electricity consumption for 1,500 households 
+over a 14-day window using XGBoost and SHAP explainability.  
+**Validation RMSLE: 0.1559** | 59% improvement over baseline  
+`XGBoost` `SHAP` `Time Series` `Panel Data` `Feature Engineering`
+
+---
+
+## In Progress
+
+### [House Prices: Advanced Regression](./house-prices-advanced-regression/)
+https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques
+<br>
+Cross-sectional tabular regression on the Ames, Iowa housing dataset 
+(79 features, 1,460 rows). Predicting `SalePrice` with RMSLE metric.  
+Planned approach: XGBoost baseline → LightGBM comparison → domain-informed 
+feature engineering → SHAP explainability.  
+`XGBoost` `LightGBM` `SHAP` `Cross-Sectional Regression` `Categorical Encoding`
+
+---
+
+## Planned — Problem-Type Tour
+
+Building baseline competency across the major ML problem types before 
+going deeper on any single one. Each project introduces one new skill 
+dimension.
+
+### [Titanic: Machine Learning from Disaster](./titanic/)
+https://www.kaggle.com/competitions/titanic
+<br>
+Binary classification — predict passenger survival (1/0) from tabular 
+features. First classification project.  
+**New skills:** Classification metrics (precision, recall, F1, ROC-AUC), 
+confusion matrix, `predict_proba`, threshold tuning.  
+`Classification` `Binary` `Tabular` `Logistic Regression` `XGBoost`
+
+### [Digit Recognizer](./digit-recognizer/)
+https://www.kaggle.com/competitions/digit-recognizer
+<br>
+Multiclass classification — classify handwritten digits (0–9) from 28×28 
+pixel images. First deep learning project.  
+**New skills:** Image data handling, CNN/MLP in PyTorch or Keras, 
+softmax, categorical cross-entropy.  
+`Deep Learning` `CNN` `Image Classification` `Multiclass` `PyTorch`
+
+### [NLP Getting Started: Disaster Tweets](./disaster-tweets/)
+https://www.kaggle.com/competitions/nlp-getting-started
+<br>
+Binary text classification — predict whether a tweet is about a real 
+disaster. First NLP project.  
+**New skills:** Text preprocessing, TF-IDF, word embeddings, 
+unstructured data handling.  
+`NLP` `Text Classification` `TF-IDF` `Embeddings` `BERT`
+
+### [Credit Card Fraud Detection](./credit-card-fraud/)
+https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
+<br>
+Anomaly detection / imbalanced classification — identify fraudulent 
+transactions (~0.17% of data).  
+**New skills:** Class imbalance handling, SMOTE/undersampling, 
+precision-recall tradeoff, PR-AUC, anomaly detection algorithms.  
+`Anomaly Detection` `Imbalanced Data` `SMOTE` `Isolation Forest`
+
+---
+
+## Planned — Applied Projects
+
+Real-world datasets and end-to-end deployments that go beyond Kaggle 
+competition structure.
+
+### Pittsburgh Home Sale Propensity Model
+Predict which houses in the Pittsburgh area are most likely to list 
+for sale, using Allegheny County property assessment and sales records 
+from the WPRDC.
+
+Binary classification problem — for each property that hasn't recently 
+sold, predict whether it will list within a given time window (e.g., 
+6 months). Features would include:
+
+- **Owner-level:** ownership duration (strongest known predictor), 
+  owner type (absentee/primary/investor), equity position estimate
+- **Property-level:** age, square footage, condition, recent renovations
+- **Spatial:** number of homes sold within 0.25-mile radius in the last 
+  6 months, median sale price of nearby recent sales, distance to 
+  nearest recent sale
+- **Market:** local inventory levels, median days-on-market, seasonality
+
+This project combines several skills from the problem-type tour: 
+binary classification, spatial feature engineering, and imbalanced 
+data (most homes don't list in any given period). Requires acquiring 
+and joining real-world data sources rather than using a pre-packaged 
+Kaggle dataset.
+
+**Prerequisite projects:** Titanic (classification metrics), 
+Credit Card Fraud (class imbalance), House Prices (real estate 
+domain knowledge).  
+**Data source:** WPRDC (Western Pennsylvania Regional Data Center) — 
+Allegheny County property assessment and sales records.  
+**New skills:** Spatial feature engineering, real-world data acquisition 
+and joining, survival analysis (time-to-event modeling), working with 
+public government datasets.  
+`Classification` `Binary` `Spatial Data` `Real Estate` `Survival Analysis` `WPRDC` `Pittsburgh`
+
+### [Pittsburgh Housing Market Model](./pittsburgh-housing-model/)
+End-to-end deployment project — apply regression skills to local 
+Pittsburgh housing data with full MLOps pipeline.  
+**New skills:** FastAPI, Docker, AWS deployment, MLflow, model monitoring.  
+`FastAPI` `Docker` `AWS` `MLflow` `Deployment`
+
+---
+
+## Problem-Type Coverage Matrix
+
+| Project | Data Type | Problem Type | Output | Key New Skill | Status |
+|---|---|---|---|---|---|
+| GreenGrid | Tabular, temporal | Panel time series forecasting | Continuous (kWh) | Temporal split, log target | ✅ |
+| House Prices | Tabular | Cross-sectional regression | Continuous (price) | Categorical encoding, meaningful NaNs | 🔄 |
+| Titanic | Tabular | Binary classification | Label (0/1) | Classification metrics | ⬜ |
+| Digit Recognizer | Image | Multiclass classification | Label (0–9) | Deep learning, CNN | ⬜ |
+| Disaster Tweets | Text | Binary text classification | Label (0/1) | NLP, TF-IDF, embeddings | ⬜ |
+| Credit Card Fraud | Tabular | Imbalanced classification | Label (0/1) | Class imbalance, anomaly detection | ⬜ |
+| Pittsburgh Sale Propensity | Tabular + spatial | Binary classification + survival | Label (0/1) + time | Spatial feature engineering, real-world data, survival analysis | ⬜ |
+| Pittsburgh Housing Model | Tabular | Regression + deployment | Continuous (price) | MLOps, FastAPI, Docker, AWS | ⬜ |
+
+---
+
+## Stack
+
+`Python` `XGBoost` `LightGBM` `scikit-learn` `SHAP` `pandas` `numpy`  
+`PyTorch` `FastAPI` `Docker` `AWS` `MLflow`  
+`Snowflake` `dbt` `Databricks` `SQL` `PySpark`
